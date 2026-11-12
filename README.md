@@ -1,37 +1,54 @@
 # Encurtador de Links para SMS
 
-Encurtador de links simples em Node.js + Express, ideal para enviar links curtos por SMS.
+Encurtador de links profissional para envio por SMS, com painel de gestão protegido por senha.
 
-## Como rodar
+## Recursos
+
+- 🔗 Criação de links curtos com código personalizado ou aleatório
+- 📊 Painel admin com senha: criar, renomear, editar e excluir links
+- 👆 Contador de cliques por link
+- 🗄️ Armazenamento no MongoDB Atlas (grátis) — links nunca somem
+- ⚡ Deploy serverless na Vercel (grátis)
+- 📱 Redirecionamento 301, ideal para SMS
+
+## Como rodar localmente
 
 ```bash
 npm install
 npm start
 ```
 
-Abra http://localhost:3000 no navegador, cole o link e clique em **Encurtar link**.
+- Página pública: http://localhost:3000
+- Painel admin: http://localhost:3000/admin (senha padrão: `admin123`)
 
-## Como funciona
+## Variáveis de ambiente
 
-- `GET /` — página para criar links curtos
-- `POST /api/shorten` — recebe `{"url": "https://..."}` e devolve `{"shortUrl": "..."}`
-- `GET /:codigo` — redireciona (301) para o link original e conta os cliques
-- `GET /api/stats/:codigo` — mostra cliques e data de criação
+Copie `.env.example` para `.env` e configure:
 
-Os links ficam salvos em `data/links.json` (arquivo criado automaticamente).
+| Variável | Descrição |
+|---|---|
+| `MONGODB_URI` | String de conexão do MongoDB Atlas |
+| `ADMIN_PASSWORD` | Senha do painel admin |
+| `SECRET` | Chave aleatória para os cookies de login |
 
-## Dica para SMS (importante)
+Sem `MONGODB_URI`, o sistema usa arquivo `data/links.json` (modo local).
 
-Para as operadoras não bloquearem seu link, o ideal é usar um **domínio próprio** (ex.: `https://seulink.com/abc123`) com HTTPS ativo. Links de domínios de encurtadores conhecidos (bit.ly, etc.) costumam ser bloqueados pelas operadoras.
+## Deploy na Vercel
 
-### Hospedagem gratuita com domínio próprio
+1. Suba o projeto no GitHub
+2. Na Vercel: **Add New Project** → importe o repositório
+3. Adicione as variáveis de ambiente acima em Settings → Environment Variables
+4. Deploy!
 
-1. Compre um domínio curto e barato (ex.: em Registro.br ou Namecheap)
-2. Hospede de graça no **Render.com** ou **Railway.app** (basta enviar esta pasta para o GitHub e conectar)
-3. Aponte o domínio para o serviço e ative o HTTPS
+## API
 
-## Usando via API (sem a página)
+- `POST /api/shorten` — `{"url": "...", "code": "opcional"}` → `{"shortUrl": "..."}`
+- `GET /:code` — redireciona para o link original
+- `POST /api/admin/login` — `{"password": "..."}`
+- `GET /api/admin/links` — lista todos os links (requer login)
+- `PATCH /api/admin/links/:code` — renomeia/edita (requer login)
+- `DELETE /api/admin/links/:code` — exclui (requer login)
 
-```bash
-curl -X POST http://localhost:3000/api/shorten -H "Content-Type: application/json" -d "{\"url\":\"https://seusite.com/pagina\"}"
-```
+## Dica para SMS
+
+Para as operadoras não bloquearem seus links, o ideal é usar um **domínio próprio** com HTTPS. Na Vercel, é só adicionar seu domínio em Settings → Domains. O domínio gratuito (`*.vercel.app`) funciona, mas domínio próprio tem entrega muito melhor.
