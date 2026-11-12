@@ -1,0 +1,12 @@
+{
+  "name": "encurtador-sms",
+  "version": "1.0.0",
+  "description": "Encurtador de links para envio por SMS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
