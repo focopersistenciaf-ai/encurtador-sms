@@ -81,6 +81,24 @@
       border-radius: 8px;
       font-size: 14px;
     }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 15px;
+      margin-bottom: 16px;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: #3b82f6; }
+    .rename-btn {
+      background: #8b5cf6;
+      padding: 8px;
+      font-size: 14px;
+    }
+    .rename-btn:hover { background: #7c3aed; }
   </style>
 </head>
 <body>
@@ -90,6 +108,8 @@
     <form id="form">
       <label for="url">Link original</label>
       <input type="url" id="url" placeholder="https://seusite.com/pagina-longa" required>
+      <label for="code">Nome do link (opcional)</label>
+      <input type="text" id="code" placeholder="ex.: promo (deixe vazio para gerar automático)">
       <button type="submit">Encurtar link</button>
     </form>
     <div class="error" id="error"></div>
@@ -97,6 +117,11 @@
       <p style="color:#94a3b8;font-size:13px;margin-bottom:6px;">Seu link curto:</p>
       <a id="shortLink" href="#" target="_blank"></a>
       <button class="copy-btn" onclick="copyLink()">📋 Copiar link</button>
+      <div class="edit-area">
+        <p style="color:#94a3b8;font-size:13px;margin:16px 0 8px;">Renomear este link:</p>
+        <input type="text" id="newCode" placeholder="novo nome (ex.: promocao)">
+        <button type="button" class="rename-btn" onclick="renameLink()">Renomear</button>
+      </div>
     </div>
   </div>
 
@@ -112,12 +137,13 @@
       result.style.display = 'none';
 
       const url = document.getElementById('url').value;
+      const code = document.getElementById('code').value;
 
       try {
         const res = await fetch('/api/shorten', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url })
+          body: JSON.stringify({ url, code })
         });
         const data = await res.json();
 
@@ -129,12 +155,48 @@
 
         shortLink.href = data.shortUrl;
         shortLink.textContent = data.shortUrl;
+        shortLink.dataset.code = data.code;
         result.style.display = 'block';
       } catch {
         errorBox.textContent = 'Erro ao conectar. Tente novamente.';
         errorBox.style.display = 'block';
       }
     });
+
+    async function renameLink() {
+      errorBox.style.display = 'none';
+      const newCode = document.getElementById('newCode').value.trim();
+      const currentCode = shortLink.dataset.code;
+
+      if (!newCode || !currentCode) return;
+
+      try {
+        const res = await fetch(`/api/links/${currentCode}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: newCode })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error;
+          errorBox.style.display = 'block';
+          return;
+        }
+
+        shortLink.href = data.shortUrl;
+        shortLink.textContent = data.shortUrl;
+        shortLink.dataset.code = data.code;
+        document.getElementById('newCode').value = '';
+        errorBox.textContent = 'Link renomeado com sucesso!';
+        errorBox.style.display = 'block';
+        errorBox.style.background = '#14532d';
+        errorBox.style.borderColor = '#22c55e';
+      } catch {
+        errorBox.textContent = 'Erro ao conectar. Tente novamente.';
+        errorBox.style.display = 'block';
+      }
+    }
 
     function copyLink() {
       navigator.clipboard.writeText(shortLink.textContent);
