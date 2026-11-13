@@ -233,6 +233,7 @@ app.get('/:code', async (req, res) => {
   const clickEntry = {
     t: new Date().toISOString(),
     ip: req.ip || '',
+    ua: (req.get('user-agent') || '').slice(0, 300),
     device: info.device,
     model: info.model || '',
     os: info.os,
