@@ -49,6 +49,7 @@
     button.red { background: #ef4444; padding: 6px 10px; font-size: 12px; }
     button.purple { background: #8b5cf6; padding: 6px 10px; font-size: 12px; }
     button.gray { background: #475569; padding: 6px 10px; font-size: 12px; }
+    button.blue { background: #0ea5e9; padding: 6px 10px; font-size: 12px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th { text-align: left; color: #94a3b8; padding: 8px; border-bottom: 1px solid #334155; }
     td { padding: 8px; border-bottom: 1px solid #1e293b; word-break: break-all; }
@@ -68,6 +69,48 @@
     .badge { background: #334155; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
     .row-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
     .row-form input { margin-bottom: 0; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 20px;
+    }
+    .modal {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 640px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .click-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #334155;
+      font-size: 13px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .click-badge {
+      background: #334155;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .close-btn {
+      float: right;
+      background: #475569;
+      padding: 6px 12px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -259,6 +302,7 @@
           <td style="text-align:center;">${link.clicks}</td>
           <td style="white-space:nowrap;">
             <button class="gray" onclick="copyLink('${short}')">📋</button>
+            <button class="blue" onclick="showClicks('${link.code}')">📈</button>
             <button class="purple" onclick="editLink('${link.code}')">✏️</button>
             <button class="red" onclick="removeLink('${link.code}')">🗑️</button>
           </td>`;
@@ -359,8 +403,58 @@
       }
     }
 
-    async function renameSite() {
-      const name = document.getElementById('siteName').value.trim().toLowerCase();
+    function deviceIcon(device, os) {
+      if (device === 'iPhone' || device === 'iPad') return '🍎';
+      if (device === 'Android' || device === 'Tablet Android') return '🤖';
+      if (device === 'Windows') return '🪟';
+      if (device === 'Mac') return '💻';
+      return '📱';
+    }
+
+    async function showClicks(code) {
+      const r = await api('/api/admin/links/' + code + '/clicks');
+      if (!r.ok) {
+        showMsg(msg, r.data.error || 'Erro', false);
+        return;
+      }
+
+      const d = r.data;
+      let inner = '<div class="card modal"><button class="close-btn" onclick="closeClicks()">✖ Fechar</button>';
+      inner += '<h1 style="font-size:16px;margin:8px 0 16px;">📈 Detalhes de /' + code + ' <span class="badge">' + d.clicks + ' cliques</span></h1>';
+      inner += '<div style="font-size:12px;color:#94a3b8;margin-bottom:12px;word-break:break-all;">' + d.url + '</div>';
+
+      if (!d.clicksList || d.clicksList.length === 0) {
+        inner += '<p style="color:#64748b;padding:20px;text-align:center;">Nenhum clique registrado ainda.</p>';
+      } else {
+        for (const c of d.clicksList) {
+          const dt = new Date(c.t);
+          const dateStr = dt.toLocaleDateString('pt-BR');
+          const timeStr = dt.toLocaleTimeString('pt-BR');
+          inner += '<div class="click-row">'
+            + '<span>' + deviceIcon(c.device, c.os) + ' <b>' + c.device + '</b>'
+            + (c.os ? ' <span class="click-badge">' + c.os + '</span>' : '')
+            + (c.browser ? ' <span class="click-badge">' + c.browser + '</span>' : '')
+            + (c.country ? ' <span class="click-badge">🌎 ' + c.country + '</span>' : '')
+            + '</span>'
+            + '<span style="color:#94a3b8;">' + dateStr + ' ' + timeStr + '</span>'
+            + '</div>';
+        }
+      }
+      inner += '</div>';
+
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.id = 'clicksModal';
+      overlay.innerHTML = inner;
+      document.body.appendChild(overlay);
+    }
+
+    function closeClicks() {
+      const m = document.getElementById('clicksModal');
+      if (m) m.remove();
+    }
+
+    async function renameSite() {      const name = document.getElementById('siteName').value.trim().toLowerCase();
       const box = document.getElementById('siteMsg');
       if (!name) {
         box.textContent = 'Digite o novo nome';

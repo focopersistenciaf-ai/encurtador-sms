@@ -45,7 +45,13 @@ async function getLinks() {
     const docs = await col.find({}).toArray();
     const links = {};
     for (const doc of docs) {
-      links[doc.code] = { url: doc.url, clicks: doc.clicks, createdAt: doc.createdAt };
+      links[doc.code] = {
+        url: doc.url,
+        clicks: doc.clicks,
+        createdAt: doc.createdAt,
+        clickLog: doc.clickLog || [],
+        ipCountries: doc.ipCountries || {}
+      };
     }
     return links;
   }
@@ -102,6 +108,49 @@ function validCode(code) {
 
 const RESERVED = ['api', 'admin', 'stats', 'favicon.ico', 'robots.txt'];
 
+function parseUA(ua) {
+  const uaStr = (ua || '').toLowerCase();
+  let device = 'Outro';
+  let os = '';
+  if (/ipad/.test(uaStr)) { device = 'iPad'; os = 'iOS'; }
+  else if (/iphone|ipod/.test(uaStr)) { device = 'iPhone'; os = 'iOS'; }
+  else if (/android/.test(uaStr)) {
+    device = /mobile/.test(uaStr) ? 'Android' : 'Tablet Android';
+    os = 'Android';
+  }
+  else if (/windows/.test(uaStr)) { device = 'Windows'; os = 'Windows'; }
+  else if (/macintosh|mac os/.test(uaStr)) { device = 'Mac'; os = 'macOS'; }
+  else if (/linux/.test(uaStr)) { device = 'Linux'; os = 'Linux'; }
+
+  let browser = 'Navegador';
+  if (/edg\//.test(uaStr)) browser = 'Edge';
+  else if (/opr\//.test(uaStr) || /opera/.test(uaStr)) browser = 'Opera';
+  else if (/whatsapp/.test(uaStr)) browser = 'WhatsApp';
+  else if (/instagram/.test(uaStr)) browser = 'Instagram';
+  else if (/samsungbrowser/.test(uaStr)) browser = 'Samsung Internet';
+  else if (/firefox\//.test(uaStr) || /fxios/.test(uaStr)) browser = 'Firefox';
+  else if (/chrome\//.test(uaStr) || /crios\//.test(uaStr)) browser = 'Chrome';
+  else if (/safari\//.test(uaStr)) browser = 'Safari';
+
+  return { device, os, browser };
+}
+
+async function lookupCountry(ip) {
+  if (!ip || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.')) {
+    return '';
+  }
+  try {
+    const r = await fetch('http://ip-api.com/json/' + ip + '?fields=countryCode,country', {
+      signal: AbortSignal.timeout(2500)
+    });
+    const data = await r.json();
+    if (data && data.status === 'success') return data.country || '';
+  } catch {
+    return '';
+  }
+  return '';
+}
+
 function createToken() {
   const payload = JSON.stringify({ exp: Date.now() + 7 * 24 * 3600 * 1000 });
   const sig = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
@@ -144,7 +193,25 @@ app.get('/:code', async (req, res) => {
     return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
   }
 
-  await setLink(code, { ...link, clicks: link.clicks + 1 });
+  const info = parseUA(req.get('user-agent'));
+  const clickEntry = {
+    t: new Date().toISOString(),
+    ip: req.ip || '',
+    device: info.device,
+    os: info.os,
+    browser: info.browser,
+    ref: (req.get('referer') || '').slice(0, 200)
+  };
+  const clickLog = (link.clickLog || []).slice(-199);
+  clickLog.push(clickEntry);
+
+  await setLink(code, {
+    url: link.url,
+    createdAt: link.createdAt,
+    clicks: (link.clicks || 0) + 1,
+    clickLog,
+    ipCountries: link.ipCountries || {}
+  });
 
   res.redirect(301, link.url);
 });
@@ -203,6 +270,45 @@ app.get('/api/admin/links', requireAuth, async (req, res) => {
   const list = Object.entries(links).map(([code, data]) => ({ code, ...data }));
   list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(list);
+});
+
+app.get('/api/admin/links/:code/clicks', requireAuth, async (req, res) => {
+  const links = await getLinks();
+  const link = links[req.params.code];
+
+  if (!link) {
+    return res.status(404).json({ error: 'Link não encontrado' });
+  }
+
+  const ipCountries = link.ipCountries || {};
+  const log = link.clickLog || [];
+  const missing = [...new Set(log.map((c) => c.ip).filter((ip) => ip && !ipCountries[ip] && !ip.startsWith('127.') && !ip.startsWith('192.168.') && !ip.startsWith('10.') && !ip.startsWith('172.16.')))];
+
+  let lookups = missing.slice(0, 15);
+  for (const ip of lookups) {
+    const country = await lookupCountry(ip);
+    if (country) ipCountries[ip] = country;
+  }
+
+  if (lookups.length) {
+    await setLink(req.params.code, {
+      url: link.url,
+      createdAt: link.createdAt,
+      clicks: link.clicks,
+      clickLog: log,
+      ipCountries
+    });
+  }
+
+  const detailed = log
+    .slice()
+    .reverse()
+    .map((c) => ({
+      ...c,
+      country: ipCountries[c.ip] || ''
+    }));
+
+  res.json({ url: link.url, clicks: link.clicks, clicksList: detailed });
 });
 
 app.patch('/api/admin/links/:code', requireAuth, async (req, res) => {
