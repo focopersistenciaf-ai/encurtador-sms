@@ -272,6 +272,69 @@ app.get('/api/admin/links', requireAuth, async (req, res) => {
   res.json(list);
 });
 
+app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
+  const links = await getLinks();
+  const all = Object.entries(links);
+  const totalLinks = all.length;
+  let totalClicks = 0;
+  let clicksToday = 0;
+  const perDay = {};
+  const devices = {};
+  const browsers = {};
+  const countries = {};
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  const linkStats = [];
+
+  for (const [code, link] of all) {
+    const clicks = link.clicks || 0;
+    totalClicks += clicks;
+    const log = link.clickLog || [];
+    const ipCountries = link.ipCountries || {};
+    let lToday = 0;
+
+    for (const c of log) {
+      const day = c.t.slice(0, 10);
+      perDay[day] = (perDay[day] || 0) + 1;
+      if (day === todayStr) lToday++;
+      if (c.device) devices[c.device] = (devices[c.device] || 0) + 1;
+      if (c.browser) browsers[c.browser] = (browsers[c.browser] || 0) + 1;
+      const country = ipCountries[c.ip] || c.country || '';
+      if (country) countries[country] = (countries[country] || 0) + 1;
+    }
+
+    clicksToday += lToday;
+    linkStats.push({ code, url: link.url, clicks, createdAt: link.createdAt });
+  }
+
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    days.push({
+      date: key,
+      label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      clicks: perDay[key] || 0
+    });
+  }
+
+  linkStats.sort((a, b) => b.clicks - a.clicks);
+
+  res.json({
+    totalLinks,
+    totalClicks,
+    clicksToday,
+    clicks7d: days.slice(-7).reduce((s, d) => s + d.clicks, 0),
+    days,
+    devices: Object.entries(devices).sort((a, b) => b[1] - a[1]),
+    browsers: Object.entries(browsers).sort((a, b) => b[1] - a[1]),
+    countries: Object.entries(countries).sort((a, b) => b[1] - a[1]),
+    topLinks: linkStats.slice(0, 5)
+  });
+});
+
 app.get('/api/admin/links/:code/clicks', requireAuth, async (req, res) => {
   const links = await getLinks();
   const link = links[req.params.code];

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel - Encurtador</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -111,6 +112,49 @@
       padding: 6px 12px;
       font-size: 13px;
     }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #1e293b, #1e3a5f);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-label { color: #94a3b8; font-size: 13px; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: bold; color: #38bdf8; }
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .top-link-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #334155;
+      font-size: 13px;
+      gap: 10px;
+    }
+    .top-link-row a { word-break: break-all; }
+    .progress-bar {
+      background: #0f172a;
+      border-radius: 8px;
+      height: 8px;
+      min-width: 80px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      background: linear-gradient(90deg, #3b82f6, #22c55e);
+      height: 100%;
+      border-radius: 8px;
+    }
   </style>
 </head>
 <body>
@@ -129,6 +173,50 @@
         <button class="logout" onclick="logout()">Sair</button>
       </div>
       <div class="msg" id="msg"></div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">🔗 Total de links</div>
+          <div class="stat-value" id="statLinks">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">👆 Total de cliques</div>
+          <div class="stat-value" id="statClicks">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">📅 Cliques hoje</div>
+          <div class="stat-value" id="statToday">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">🗓️ Últimos 7 dias</div>
+          <div class="stat-value" id="stat7d">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h1 style="font-size:16px;margin-bottom:16px;">📈 Cliques nos últimos 14 dias</h1>
+        <canvas id="clicksChart" height="90"></canvas>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h1 style="font-size:14px;margin-bottom:16px;">📱 Aparelhos</h1>
+          <canvas id="devicesChart" height="160"></canvas>
+        </div>
+        <div class="card">
+          <h1 style="font-size:14px;margin-bottom:16px;">🌐 Navegadores</h1>
+          <canvas id="browsersChart" height="160"></canvas>
+        </div>
+        <div class="card">
+          <h1 style="font-size:14px;margin-bottom:16px;">🌎 Países</h1>
+          <canvas id="countriesChart" height="160"></canvas>
+        </div>
+      </div>
+
+      <div class="card" id="topLinksCard">
+        <h1 style="font-size:16px;margin-bottom:16px;">🏆 Links mais clicados</h1>
+        <div id="topLinks"><p style="color:#64748b;">Carregando...</p></div>
+      </div>
 
       <div class="card">
         <h1 style="font-size:16px;margin-bottom:16px;">➕ Criar novo link</h1>
@@ -213,6 +301,91 @@
     }
 
     let autoRefresh = null;
+    let clicksChartObj = null;
+    let devicesChartObj = null;
+    let browsersChartObj = null;
+    let countriesChartObj = null;
+
+    const CHART_COLORS = ['#38bdf8', '#22c55e', '#f59e0b', '#a78bfa', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
+
+    function makeDonut(id, labels, values, chartRef) {
+      const ctx = document.getElementById(id);
+      if (!ctx || typeof Chart === 'undefined') return;
+      if (chartRef.value) chartRef.value.destroy();
+      chartRef.value = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    async function loadDashboard() {
+      const r = await api('/api/admin/dashboard');
+      if (!r.ok) return;
+      const d = r.data;
+
+      document.getElementById('statLinks').textContent = d.totalLinks;
+      document.getElementById('statClicks').textContent = d.totalClicks;
+      document.getElementById('statToday').textContent = d.clicksToday;
+      document.getElementById('stat7d').textContent = d.clicks7d;
+
+      if (typeof Chart !== 'undefined') {
+        const ctx = document.getElementById('clicksChart');
+        if (clicksChartObj) clicksChartObj.destroy();
+        clicksChartObj = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: d.days.map((x) => x.label),
+            datasets: [{
+              label: 'Cliques',
+              data: d.days.map((x) => x.clicks),
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56,189,248,.15)',
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: '#38bdf8'
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
+              y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#1e293b' } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+
+        makeDonut('devicesChart', d.devices.map((x) => x[0]), d.devices.map((x) => x[1]), { value: devicesChartObj });
+        makeDonut('browsersChart', d.browsers.map((x) => x[0]), d.browsers.map((x) => x[1]), { value: browsersChartObj });
+        makeDonut('countriesChart', d.countries.map((x) => x[0]), d.countries.map((x) => x[1]), { value: countriesChartObj });
+      }
+
+      const topEl = document.getElementById('topLinks');
+      if (!d.topLinks || d.topLinks.length === 0) {
+        topEl.innerHTML = '<p style="color:#64748b;">Nenhum link ainda.</p>';
+      } else {
+        const max = d.topLinks[0].clicks || 1;
+        topEl.innerHTML = d.topLinks.map((l) => `
+          <div class="top-link-row">
+            <a href="/${l.code}" target="_blank">/${l.code}</a>
+            <div class="progress-bar"><div class="progress-fill" style="width:${Math.max(4, Math.round((l.clicks / max) * 100))}%"></div></div>
+            <span class="click-badge">${l.clicks} cliques</span>
+          </div>`).join('');
+      }
+    }
 
     async function checkAuth() {
       const r = await api('/api/admin/links');
@@ -223,6 +396,7 @@
         hide(loginCard);
         show(dashboard);
         loadLinks();
+        loadDashboard();
         startAutoRefresh();
       }
     }
@@ -233,6 +407,7 @@
         loadLinks(true);
         loadSiteStatus();
       }, 2000);
+      setInterval(loadDashboard, 15000);
     }
 
     async function login() {
@@ -245,6 +420,7 @@
         hide(loginCard);
         show(dashboard);
         loadLinks();
+        loadDashboard();
         startAutoRefresh();
       } else {
         showMsg(loginMsg, r.data.error || 'Senha incorreta', false);
@@ -270,6 +446,7 @@
         document.getElementById('newUrl').value = '';
         document.getElementById('newCode').value = '';
         loadLinks();
+        loadDashboard();
       } else {
         showMsg(msg, r.data.error, false);
       }
