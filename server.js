@@ -381,6 +381,23 @@ app.post('/api/admin/bulk', requireAuth, async (req, res) => {
   res.json({ created, errors });
 });
 
+app.delete('/api/admin/links/:code/clicks', requireAuth, async (req, res) => {
+  const links = await getLinks();
+  const link = links[req.params.code];
+  if (!link) {
+    return res.status(404).json({ error: 'Link não encontrado' });
+  }
+  await setLink(req.params.code, {
+    url: link.url,
+    createdAt: link.createdAt,
+    clicks: 0,
+    clickLog: [],
+    ipCountries: {},
+    expiresAt: link.expiresAt || null
+  });
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/export-csv', requireAuth, async (req, res) => {
   const links = await getLinks();
   const rows = [['codigo', 'url_original', 'url_curta', 'cliques', 'criado_em', 'expira_em']];

@@ -574,7 +574,7 @@
 
       const d = r.data;
       let inner = '<div class="card modal"><button class="close-btn" onclick="closeClicks()">✖ Fechar</button>';
-      inner += '<h1 style="font-size:16px;margin:8px 0 16px;">📈 Detalhes de /' + code + ' <span class="badge">' + d.clicks + ' cliques</span></h1>';
+      inner += '<h1 style="font-size:16px;margin:8px 0 16px;">📈 Detalhes de /' + code + ' <span class="badge">' + d.clicks + ' cliques</span> <button class="red" style="float:right;margin-top:-4px;" title="Apagar histórico de cliques" onclick="clearClicks(\'' + code + '\')">🧹 Limpar</button></h1>';
       inner += '<div style="font-size:12px;color:#94a3b8;margin-bottom:12px;word-break:break-all;">' + d.url + '</div>';
 
       if (!d.clicksList || d.clicksList.length === 0) {
@@ -619,6 +619,19 @@
     function closeClicks() {
       const m = document.getElementById('clicksModal');
       if (m) m.remove();
+    }
+
+    async function clearClicks(code) {
+      if (!confirm('Apagar TODO o histórico de cliques deste link e zerar o contador?')) return;
+      const r = await api('/api/admin/links/' + code + '/clicks', { method: 'DELETE' });
+      if (r.ok) {
+        showMsg(msg, 'Histórico de cliques apagado', true);
+        closeClicks();
+        loadLinks();
+        loadDashboard();
+      } else {
+        showMsg(msg, r.data.error || 'Erro', false);
+      }
     }
 
     function searchLinks() {
