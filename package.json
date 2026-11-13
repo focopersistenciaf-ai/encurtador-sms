@@ -9,6 +9,7 @@
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "express": "^4.19.2",
-    "mongodb": "^7.9.0"
+    "mongodb": "^7.9.0",
+    "qrcode": "^1.5.4"
   }
 }

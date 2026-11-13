@@ -50,7 +50,8 @@ async function getLinks() {
         clicks: doc.clicks,
         createdAt: doc.createdAt,
         clickLog: doc.clickLog || [],
-        ipCountries: doc.ipCountries || {}
+        ipCountries: doc.ipCountries || {},
+        expiresAt: doc.expiresAt || null
       };
     }
     return links;
@@ -193,6 +194,10 @@ app.get('/:code', async (req, res) => {
     return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
   }
 
+  if (link.expiresAt && new Date(link.expiresAt) < new Date()) {
+    return res.status(410).sendFile(path.join(__dirname, 'public', '410.html'));
+  }
+
   const info = parseUA(req.get('user-agent'));
   const clickEntry = {
     t: new Date().toISOString(),
@@ -210,18 +215,51 @@ app.get('/:code', async (req, res) => {
     createdAt: link.createdAt,
     clicks: (link.clicks || 0) + 1,
     clickLog,
-    ipCountries: link.ipCountries || {}
+    ipCountries: link.ipCountries || {},
+    expiresAt: link.expiresAt || null
   });
 
-  res.redirect(301, link.url);
+  let target = link.url;
+  if (Object.keys(req.query).length) {
+    const parsed = new URL(target);
+    for (const [k, v] of Object.entries(req.query)) {
+      parsed.searchParams.set(k, v);
+    }
+    target = parsed.toString();
+  }
+
+  res.redirect(301, target);
+});
+
+app.get('/qr/:code', async (req, res) => {
+  const code = req.params.code.replace(/\.png$/, '');
+  const links = await getLinks();
+  const link = links[code];
+  if (!link) {
+    return res.status(404).send('Link não encontrado');
+  }
+  const base = `${req.protocol}://${req.get('host')}`;
+  try {
+    const QRCode = require('qrcode');
+    const png = await QRCode.toBuffer(base + '/' + code, { width: 400, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(png);
+  } catch {
+    res.status(500).send('Erro ao gerar QR');
+  }
 });
 
 app.post('/api/shorten', async (req, res) => {
   const url = (req.body.url || '').trim();
   const customCode = (req.body.code || '').trim();
+  const expiresDays = parseInt(req.body.expiresDays || '0', 10);
 
   if (!validUrl(url)) {
     return res.status(400).json({ error: 'Informe uma URL válida (com http:// ou https://)' });
+  }
+  if (expiresDays && (isNaN(expiresDays) || expiresDays < 1 || expiresDays > 3650)) {
+    return res.status(400).json({ error: 'Validade inválida. Use entre 1 e 3650 dias.' });
   }
 
   const links = await getLinks();
@@ -244,10 +282,14 @@ app.post('/api/shorten', async (req, res) => {
     } while (links[code]);
   }
 
-  await setLink(code, { url, clicks: 0, createdAt: new Date().toISOString() });
+  const data = { url, clicks: 0, createdAt: new Date().toISOString() };
+  if (expiresDays) {
+    data.expiresAt = new Date(Date.now() + expiresDays * 24 * 3600 * 1000).toISOString();
+  }
+  await setLink(code, data);
 
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({ shortUrl: `${base}/${code}`, code });
+  res.json({ shortUrl: `${base}/${code}`, code, expiresAt: data.expiresAt || null });
 });
 
 app.post('/api/admin/login', (req, res) => {
@@ -267,9 +309,62 @@ app.post('/api/admin/logout', (req, res) => {
 
 app.get('/api/admin/links', requireAuth, async (req, res) => {
   const links = await getLinks();
-  const list = Object.entries(links).map(([code, data]) => ({ code, ...data }));
+  const q = (req.query.q || '').toLowerCase();
+  let list = Object.entries(links).map(([code, data]) => ({ code, ...data }));
+  if (q) {
+    list = list.filter((l) => l.code.toLowerCase().includes(q) || (l.url || '').toLowerCase().includes(q));
+  }
   list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json(list);
+});
+
+app.post('/api/admin/bulk', requireAuth, async (req, res) => {
+  const urls = Array.isArray(req.body.urls) ? req.body.urls : [];
+  if (!urls.length || urls.length > 50) {
+    return res.status(400).json({ error: 'Envie de 1 a 50 links.' });
+  }
+  const links = await getLinks();
+  const created = [];
+  const errors = [];
+
+  for (const item of urls) {
+    const url = typeof item === 'string' ? item.trim() : (item.url || '').trim();
+    if (!validUrl(url)) {
+      errors.push({ url: url || '(vazio)', error: 'URL inválida' });
+      continue;
+    }
+    let code;
+    do {
+      code = generateCode();
+    } while (links[code]);
+    const data = { url, clicks: 0, createdAt: new Date().toISOString() };
+    await setLink(code, data);
+    links[code] = data;
+    const base = `${req.protocol}://${req.get('host')}`;
+    created.push({ shortUrl: `${base}/${code}`, code, url });
+  }
+
+  res.json({ created, errors });
+});
+
+app.get('/api/admin/export-csv', requireAuth, async (req, res) => {
+  const links = await getLinks();
+  const rows = [['codigo', 'url_original', 'url_curta', 'cliques', 'criado_em', 'expira_em']];
+  const base = `${req.protocol}://${req.get('host')}`;
+  for (const [code, link] of Object.entries(links)) {
+    rows.push([
+      code,
+      link.url,
+      `${base}/${code}`,
+      String(link.clicks || 0),
+      link.createdAt || '',
+      link.expiresAt || ''
+    ]);
+  }
+  const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="relatorio-links.csv"');
+  res.send('\uFEFF' + csv);
 });
 
 app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
