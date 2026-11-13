@@ -170,7 +170,7 @@
     <div class="hidden" id="dashboard">
       <div class="toolbar">
         <h1>📊 Painel de Links</h1>
-        <button class="logout" onclick="logout()">Sair</button>
+        <button class="logout" title="Sair do painel" onclick="logout()">Sair</button>
       </div>
       <div class="msg" id="msg"></div>
 
@@ -489,11 +489,11 @@
           <td style="max-width:250px;">${link.url}</td>
           <td style="text-align:center;">${link.clicks}</td>
           <td style="white-space:nowrap;">
-            <button class="gray" onclick="copyLink('${short}')">📋</button>
-            <button class="blue" onclick="showClicks('${link.code}')">📈</button>
-            <button class="green" onclick="showQr('${link.code}')">🔳</button>
-            <button class="purple" onclick="editLink('${link.code}')">✏️</button>
-            <button class="red" onclick="removeLink('${link.code}')">🗑️</button>
+            <button class="gray" title="Copiar link" onclick="copyLink('${short}')">📋</button>
+            <button class="blue" title="Ver cliques" onclick="showClicks('${link.code}')">📈</button>
+            <button class="green" title="QR Code" onclick="showQr('${link.code}')">🔳</button>
+            <button class="purple" title="Editar link" onclick="editLink('${link.code}')">✏️</button>
+            <button class="red" title="Excluir link" onclick="removeLink('${link.code}')">🗑️</button>
           </td>`;
         tbody.appendChild(tr);
       }
