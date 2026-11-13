@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const dns = require('dns');
 const cookieParser = require('cookie-parser');
 const { MongoClient } = require('mongodb');
 
@@ -12,6 +13,9 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const SECRET = process.env.SECRET || crypto.randomBytes(32).toString('hex');
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN || '';
+const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID || '';
+const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || '';
 
 const DB_NAME = 'encurtador';
 const COLLECTION = 'links';
@@ -241,6 +245,92 @@ app.delete('/api/admin/links/:code', requireAuth, async (req, res) => {
   }
   await deleteLink(req.params.code);
   res.json({ ok: true });
+});
+
+function vercelApi(path, options = {}) {
+  const url = 'https://api.vercel.com' + path;
+  const teamQuery = VERCEL_TEAM_ID ? (url.includes('?') ? '&' : '?') + 'teamId=' + VERCEL_TEAM_ID : '';
+  return fetch(url + teamQuery, {
+    ...options,
+    headers: {
+      Authorization: 'Bearer ' + VERCEL_TOKEN,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+}
+
+app.get('/api/admin/site-status', requireAuth, async (req, res) => {
+  if (!VERCEL_TOKEN || !VERCEL_PROJECT_ID) {
+    return res.json({ configured: false, domain: req.get('host') });
+  }
+  try {
+    const proj = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID);
+    const pj = await proj.json();
+    const doms = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID + '/domains');
+    const dj = await doms.json();
+    const vercelDomain = (dj.domains || []).map((d) => d.name).find((n) => n.endsWith('.vercel.app')) || '';
+    const lastDeploy = (pj.latestDeployments || []).find((d) => d.target === 'production');
+    res.json({
+      configured: true,
+      projectName: pj.name,
+      domain: vercelDomain || req.get('host'),
+      deployStatus: lastDeploy ? lastDeploy.readyState : 'unknown'
+    });
+  } catch (e) {
+    res.json({ configured: true, domain: req.get('host'), projectName: '', deployStatus: 'unknown' });
+  }
+});
+
+app.post('/api/admin/site-rename', requireAuth, async (req, res) => {
+  if (!VERCEL_TOKEN || !VERCEL_PROJECT_ID) {
+    return res.status(400).json({ error: 'Chave da Vercel não configurada. Peça ajuda para configurar.' });
+  }
+
+  const name = (req.body.name || '').trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{2,40}$/.test(name)) {
+    return res.status(400).json({ error: 'Nome inválido. Use de 3 a 40 letras minúsculas, números e hífen.' });
+  }
+
+  try {
+    await dns.promises.resolve(name + '.vercel.app');
+    return res.status(409).json({ error: 'O nome "' + name + '" já está em uso na Vercel. Escolha outro.' });
+  } catch (e) {
+    if (e.code !== 'ENOTFOUND') {
+      return res.status(502).json({ error: 'Erro ao verificar disponibilidade. Tente novamente.' });
+    }
+  }
+
+  try {
+    const current = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID);
+    const cj = await current.json();
+    const oldDomain = req.get('host');
+
+    const upd = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID, {
+      method: 'PATCH',
+      body: JSON.stringify({ name })
+    });
+    if (!upd.ok) {
+      const err = await upd.json().catch(() => ({}));
+      return res.status(upd.status).json({ error: err.error?.message || 'Erro ao renomear o projeto.' });
+    }
+
+    if (oldDomain.endsWith('.vercel.app') && oldDomain !== name + '.vercel.app') {
+      await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID + '/domains/' + oldDomain, { method: 'DELETE' });
+      const add = await vercelApi('/v10/projects/' + VERCEL_PROJECT_ID + '/domains', {
+        method: 'POST',
+        body: JSON.stringify({ name: name + '.vercel.app' })
+      });
+      if (!add.ok) {
+        const err = await add.json().catch(() => ({}));
+        return res.status(add.status).json({ error: 'Renomeado, mas falha ao trocar domínio: ' + (err.error?.message || 'desconhecido') });
+      }
+    }
+
+    res.json({ newUrl: 'https://' + name + '.vercel.app', name });
+  } catch (e) {
+    res.status(502).json({ error: 'Erro ao comunicar com a Vercel. Tente novamente.' });
+  }
 });
 
 app.get('/api/admin/domain-check', requireAuth, async (req, res) => {

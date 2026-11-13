@@ -127,6 +127,23 @@
           <a id="buyLink" href="#" target="_blank" style="color:#22c55e;font-size:14px;">Comprar este domínio no Registro.br →</a>
         </div>
       </div>
+
+      <div class="card">
+        <h1 style="font-size:16px;margin-bottom:8px;">🏠 Endereço do site</h1>
+        <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">
+          Endereço atual: <span id="siteDomain" style="color:#22c55e;font-weight:bold;">carregando...</span>
+          <span id="siteDeploy" style="color:#94a3b8;"></span>
+        </p>
+        <div class="row-form">
+          <div style="grid-column: span 2;">
+            <label>Novo nome (ficará: novo-nome.vercel.app)</label>
+            <input type="text" id="siteName" placeholder="ex.: resgateponto">
+          </div>
+          <button onclick="renameSite()">Mudar</button>
+        </div>
+        <div class="msg" id="siteMsg" style="margin-top:12px;"></div>
+        <p style="color:#64748b;font-size:12px;margin-top:10px;">⚠️ Ao mudar, o endereço antigo deixa de funcionar. Todos os links passam a usar o novo endereço automaticamente.</p>
+      </div>
     </div>
   </div>
 
@@ -301,7 +318,52 @@
       }
     }
 
+    async function loadSiteStatus() {
+      const r = await api('/api/admin/site-status');
+      if (r.ok && r.data.configured) {
+        document.getElementById('siteDomain').textContent = r.data.domain;
+        if (r.data.deployStatus) {
+          document.getElementById('siteDeploy').textContent = ' • status: ' + r.data.deployStatus;
+        }
+      } else {
+        document.getElementById('siteDomain').textContent = r.data && r.data.domain ? r.data.domain : location.host;
+      }
+    }
+
+    async function renameSite() {
+      const name = document.getElementById('siteName').value.trim().toLowerCase();
+      const box = document.getElementById('siteMsg');
+      if (!name) {
+        box.textContent = 'Digite o novo nome';
+        box.className = 'msg err';
+        return;
+      }
+      box.textContent = 'Verificando disponibilidade e mudando...';
+      box.className = 'msg';
+      box.style.display = 'block';
+      box.style.background = '#1e293b';
+      box.style.border = '1px solid #334155';
+
+      const r = await api('/api/admin/site-rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (r.ok) {
+        box.textContent = '✅ Novo endereço: ' + r.data.newUrl + ' (atualize a página)';
+        box.className = 'msg ok';
+        box.style.background = '#14532d';
+        document.getElementById('siteName').value = '';
+        loadSiteStatus();
+      } else {
+        box.textContent = r.data.error || 'Erro ao mudar';
+        box.className = 'msg err';
+        box.style.background = '#7f1d1d';
+      }
+    }
+
     checkAuth();
+    loadSiteStatus();
   </script>
 </body>
 </html>
