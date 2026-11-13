@@ -103,7 +103,7 @@
       </div>
 
       <div class="card">
-        <h1 style="font-size:16px;margin-bottom:16px;">Meus links <span class="badge" id="count"></span></h1>
+        <h1 style="font-size:16px;margin-bottom:16px;">Meus links <span class="badge" id="count"></span> <span id="lastUpdate" style="font-size:11px;color:#64748b;font-weight:normal;"></span></h1>
         <table>
           <thead>
             <tr><th>Link curto</th><th>Original</th><th>Cliques</th><th>Ações</th></tr>
@@ -169,6 +169,8 @@
       return { ok: res.ok, status: res.status, data };
     }
 
+    let autoRefresh = null;
+
     async function checkAuth() {
       const r = await api('/api/admin/links');
       if (r.status === 401) {
@@ -178,7 +180,16 @@
         hide(loginCard);
         show(dashboard);
         loadLinks();
+        startAutoRefresh();
       }
+    }
+
+    function startAutoRefresh() {
+      if (autoRefresh) return;
+      autoRefresh = setInterval(() => {
+        loadLinks(true);
+        loadSiteStatus();
+      }, 10000);
     }
 
     async function login() {
@@ -191,6 +202,7 @@
         hide(loginCard);
         show(dashboard);
         loadLinks();
+        startAutoRefresh();
       } else {
         showMsg(loginMsg, r.data.error || 'Senha incorreta', false);
       }
@@ -220,12 +232,20 @@
       }
     }
 
-    async function loadLinks() {
+    async function loadLinks(silent) {
       const r = await api('/api/admin/links');
       if (!r.ok) return;
       const tbody = document.getElementById('tbody');
       document.getElementById('count').textContent = r.data.length + ' links';
       tbody.innerHTML = '';
+
+      if (!silent) {
+        const d = new Date();
+        const h = String(d.getHours()).padStart(2, '0');
+        const m = String(d.getMinutes()).padStart(2, '0');
+        const s = String(d.getSeconds()).padStart(2, '0');
+        document.getElementById('lastUpdate').textContent = 'Atualizado às ' + h + ':' + m + ':' + s;
+      }
 
       if (r.data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:20px;">Nenhum link ainda. Crie o primeiro acima!</td></tr>';
