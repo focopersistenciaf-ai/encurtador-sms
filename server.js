@@ -243,6 +243,41 @@ app.delete('/api/admin/links/:code', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/admin/domain-check', requireAuth, async (req, res) => {
+  const domain = (req.query.domain || '').trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/.test(domain)) {
+    return res.status(400).json({ error: 'Digite um domínio válido (ex.: resgate.com.br)' });
+  }
+
+  const tld = domain.slice(domain.indexOf('.') + 1);
+  const rdapServers = {
+    'com.br': 'https://rdap.registro.br/domain/',
+    'net.br': 'https://rdap.registro.br/domain/',
+    'org.br': 'https://rdap.registro.br/domain/',
+    'com': 'https://rdap.verisign.com/com/v1/domain/',
+    'net': 'https://rdap.verisign.com/net/v1/domain/',
+    'org': 'https://rdap.pir.org/domain/'
+  };
+
+  const base = rdapServers[tld];
+  if (!base) {
+    return res.status(400).json({ error: `Não consigo verificar domínios .${tld}. Use .com.br ou .com` });
+  }
+
+  try {
+    const r = await fetch(base + domain);
+    if (r.status === 404) {
+      return res.json({ domain, available: true });
+    }
+    if (r.ok) {
+      return res.json({ domain, available: false });
+    }
+    return res.status(502).json({ error: 'Erro ao consultar o registro. Tente novamente em instantes.' });
+  } catch {
+    return res.status(502).json({ error: 'Erro ao consultar o registro. Tente novamente em instantes.' });
+  }
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);

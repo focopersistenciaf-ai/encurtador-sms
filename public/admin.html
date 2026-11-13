@@ -111,6 +111,22 @@
           <tbody id="tbody"></tbody>
         </table>
       </div>
+
+      <div class="card">
+        <h1 style="font-size:16px;margin-bottom:8px;">🌐 Verificar domínio</h1>
+        <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;">Verifique se um domínio está disponível para compra (ex.: resgate.com.br)</p>
+        <div class="row-form">
+          <div style="grid-column: span 2;">
+            <label>Domínio desejado</label>
+            <input type="text" id="domainInput" placeholder="ex.: resgate.com.br">
+          </div>
+          <button onclick="checkDomain()">Verificar</button>
+        </div>
+        <div class="msg" id="domainMsg" style="margin-top:12px;"></div>
+        <div id="domainBuy" class="hidden" style="margin-top:8px;">
+          <a id="buyLink" href="#" target="_blank" style="color:#22c55e;font-size:14px;">Comprar este domínio no Registro.br →</a>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -246,6 +262,42 @@
         loadLinks();
       } else {
         showMsg(msg, r.data.error, false);
+      }
+    }
+
+    async function checkDomain() {
+      const domain = document.getElementById('domainInput').value.trim().toLowerCase();
+      const box = document.getElementById('domainMsg');
+      const buyArea = document.getElementById('domainBuy');
+      buyArea.classList.add('hidden');
+      if (!domain) {
+        box.textContent = 'Digite um domínio';
+        box.className = 'msg err';
+        return;
+      }
+      box.textContent = 'Verificando...';
+      box.className = 'msg';
+      box.style.display = 'block';
+      box.style.background = '#1e293b';
+      box.style.border = '1px solid #334155';
+
+      const r = await api('/api/admin/domain-check?domain=' + encodeURIComponent(domain));
+      if (r.ok) {
+        if (r.data.available) {
+          box.textContent = '✅ ' + domain + ' está DISPONÍVEL!';
+          box.className = 'msg ok';
+          box.style.background = '#14532d';
+          document.getElementById('buyLink').href = 'https://registro.br/busca/?fqdn=' + encodeURIComponent(domain);
+          buyArea.classList.remove('hidden');
+        } else {
+          box.textContent = '❌ ' + domain + ' já está registrado por outra pessoa.';
+          box.className = 'msg err';
+          box.style.background = '#7f1d1d';
+        }
+      } else {
+        box.textContent = r.data.error || 'Erro ao verificar';
+        box.className = 'msg err';
+        box.style.background = '#7f1d1d';
       }
     }
 
