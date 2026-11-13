@@ -111,27 +111,45 @@ function validCode(code) {
 const RESERVED = ['api', 'admin', 'stats', 'favicon.ico', 'robots.txt'];
 
 function parseUA(ua) {
+  const raw = ua || '';
   try {
     const p = new UAParser(ua);
     const r = p.getResult();
-    const osName = r.os.name || '';
-    const osVersion = r.os.version || '';
+
+    let osName = r.os.name || '';
+    let osVersion = r.os.version || '';
     const browserName = r.browser.name || '';
     const browserVersion = r.browser.version || '';
-
-    let device = r.device.type === 'tablet' ? 'Tablet' : (r.device.type === 'mobile' ? 'Celular' : (r.device.type || 'Computador'));
     let model = (r.device.model || '').trim();
+
+    const androidVer = raw.match(/Android[ ](\d+(?:\.\d+)?)/i);
+    if (androidVer) {
+      osName = 'Android';
+      osVersion = androidVer[1];
+    }
+    const iosVer = raw.match(/CPU (?:iPhone )?OS[ ](\d+)[_](\d+)/i);
+    if (iosVer) {
+      osName = 'iOS';
+      osVersion = iosVer[1] + '.' + iosVer[2];
+    }
+
+    if (osName === 'Android') {
+      const moto = raw.match(/moto[ ]([a-z0-9 _.-]+?)(?: Build|\)|;|$)/i);
+      if (moto) model = 'Moto ' + moto[1].trim();
+      const samsung = raw.match(/SM-([A-Z0-9]+)/);
+      if (!model && samsung) model = 'Samsung SM-' + samsung[1];
+      const generic = raw.match(/; ([a-zA-Z0-9 _.-]{3,30}?) Build\//);
+      if (!model && generic) model = generic[1].trim();
+    }
 
     if (model.length <= 2) {
       model = '';
-    }
-    if (model.startsWith('SM-')) {
-      model = 'Samsung ' + model;
     }
     if (osName === 'iOS' && !model) {
       model = r.device.vendor || 'iPhone';
     }
 
+    let device = r.device.type === 'tablet' ? 'Tablet' : (r.device.type === 'mobile' ? 'Celular' : (r.device.type || 'Computador'));
     let browserNameFinal = browserName;
     if (browserName === 'Mobile Safari') browserNameFinal = 'Safari';
     if (browserName === 'Mobile Chrome') browserNameFinal = 'Chrome';
