@@ -293,38 +293,38 @@ app.post('/api/admin/site-rename', requireAuth, async (req, res) => {
   }
 
   try {
-    await dns.promises.resolve(name + '.vercel.app');
-    return res.status(409).json({ error: 'O nome "' + name + '" já está em uso na Vercel. Escolha outro.' });
-  } catch (e) {
-    if (e.code !== 'ENOTFOUND') {
-      return res.status(502).json({ error: 'Erro ao verificar disponibilidade. Tente novamente.' });
-    }
-  }
-
-  try {
     const current = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID);
     const cj = await current.json();
+
     const oldDomain = req.get('host');
+    if (name + '.vercel.app' === oldDomain) {
+      return res.status(400).json({ error: 'O site já usa esse nome.' });
+    }
+
+    const claim = await vercelApi('/v10/projects/' + VERCEL_PROJECT_ID + '/domains', {
+      method: 'POST',
+      body: JSON.stringify({ name: name + '.vercel.app' })
+    });
+    if (claim.status === 409) {
+      return res.status(409).json({ error: 'O nome "' + name + '" já está em uso na Vercel. Escolha outro.' });
+    }
+    if (!claim.ok) {
+      const err = await claim.json().catch(() => ({}));
+      return res.status(claim.status).json({ error: 'Nome "' + name + '" não disponível.' });
+    }
 
     const upd = await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID, {
       method: 'PATCH',
       body: JSON.stringify({ name })
     });
     if (!upd.ok) {
+      await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID + '/domains/' + name + '.vercel.app', { method: 'DELETE' });
       const err = await upd.json().catch(() => ({}));
       return res.status(upd.status).json({ error: err.error?.message || 'Erro ao renomear o projeto.' });
     }
 
     if (oldDomain.endsWith('.vercel.app') && oldDomain !== name + '.vercel.app') {
       await vercelApi('/v9/projects/' + VERCEL_PROJECT_ID + '/domains/' + oldDomain, { method: 'DELETE' });
-      const add = await vercelApi('/v10/projects/' + VERCEL_PROJECT_ID + '/domains', {
-        method: 'POST',
-        body: JSON.stringify({ name: name + '.vercel.app' })
-      });
-      if (!add.ok) {
-        const err = await add.json().catch(() => ({}));
-        return res.status(add.status).json({ error: 'Renomeado, mas falha ao trocar domínio: ' + (err.error?.message || 'desconhecido') });
-      }
     }
 
     res.json({ newUrl: 'https://' + name + '.vercel.app', name });
