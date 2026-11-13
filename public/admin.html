@@ -585,7 +585,8 @@
           const dateStr = dt.toLocaleDateString('pt-BR');
           const timeStr = dt.toLocaleTimeString('pt-BR');
 
-          const title = c.model ? c.model : c.device;
+          const modelClean = c.model && c.model.length > 2 ? c.model : '';
+          const title = modelClean || c.device;
           const osFull = c.os + (c.osVersion ? ' ' + c.osVersion : '');
           const brFull = c.browser + (c.browserVersion ? ' ' + c.browserVersion : '');
 

@@ -122,6 +122,9 @@ function parseUA(ua) {
     let device = r.device.type === 'tablet' ? 'Tablet' : (r.device.type === 'mobile' ? 'Celular' : (r.device.type || 'Computador'));
     let model = (r.device.model || '').trim();
 
+    if (model.length <= 2) {
+      model = '';
+    }
     if (model.startsWith('SM-')) {
       model = 'Samsung ' + model;
     }
