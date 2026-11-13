@@ -587,6 +587,7 @@
 
           const modelClean = c.model && c.model.length > 2 ? c.model : '';
           const title = modelClean || c.device;
+          const sourceBadge = c.source ? '<span class="click-badge" style="background:#075e54;color:#25d366;">💬 Aberto pelo ' + c.source + '</span>' : '';
           const osFull = c.os + (c.osVersion ? ' ' + c.osVersion : '');
           const brFull = c.browser + (c.browserVersion ? ' ' + c.browserVersion : '');
 
@@ -597,6 +598,7 @@
             + '<div style="font-weight:bold;">' + title + '</div>'
             + '<div style="font-size:11px;color:#94a3b8;">' + (osFull || '—') + ' • ' + (brFull || '—') + '</div>'
             + '</div>'
+            + sourceBadge
             + '</div>'
             + '<div style="text-align:right;">'
             + '<div style="color:#e2e8f0;font-size:13px;">' + dateStr + '</div>'

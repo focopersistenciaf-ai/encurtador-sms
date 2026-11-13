@@ -154,13 +154,22 @@ function parseUA(ua) {
     if (browserName === 'Mobile Safari') browserNameFinal = 'Safari';
     if (browserName === 'Mobile Chrome') browserNameFinal = 'Chrome';
 
+    let source = '';
+    const low = raw.toLowerCase();
+    if (low.includes('whatsapp')) source = 'WhatsApp';
+    else if (low.includes('instagram')) source = 'Instagram';
+    else if (low.includes('telegram')) source = 'Telegram';
+    else if (low.includes('fb_iab') || low.includes('fban')) source = 'Facebook';
+    else if (low.includes('twitter') || low.includes('twitterbot')) source = 'Twitter/X';
+
     return {
       device,
       model,
       os: osName,
       osVersion,
       browser: browserNameFinal,
-      browserVersion
+      browserVersion,
+      source
     };
   } catch {
     return { device: 'Outro', model: '', os: '', osVersion: '', browser: '', browserVersion: '' };
@@ -240,6 +249,7 @@ app.get('/:code', async (req, res) => {
     osVersion: info.osVersion || '',
     browser: info.browser,
     browserVersion: info.browserVersion || '',
+    source: info.source || '',
     ref: (req.get('referer') || '').slice(0, 200)
   };
   const clickLog = (link.clickLog || []).slice(-199);
