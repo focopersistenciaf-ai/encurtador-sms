@@ -159,6 +159,7 @@
     function showMsg(box, text, ok) {
       box.textContent = text;
       box.className = 'msg ' + (ok ? 'ok' : 'err');
+      box.style.display = 'block';
       setTimeout(() => (box.style.display = 'none'), 4000);
     }
 
@@ -247,9 +248,19 @@
       }
     }
 
-    function copyLink(short) {
-      navigator.clipboard.writeText(short);
-      showMsg(msg, 'Copiado: ' + short, true);
+    async function copyLink(short) {
+      try {
+        await navigator.clipboard.writeText(short);
+        showMsg(msg, '✅ Copiado: ' + short, true);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = short;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showMsg(msg, '✅ Copiado: ' + short, true);
+      }
     }
 
     async function editLink(code) {
