@@ -5,6 +5,7 @@ const fs = require('fs');
 const dns = require('dns');
 const cookieParser = require('cookie-parser');
 const { MongoClient } = require('mongodb');
+const { UAParser } = require('ua-parser-js');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -110,30 +111,39 @@ function validCode(code) {
 const RESERVED = ['api', 'admin', 'stats', 'favicon.ico', 'robots.txt'];
 
 function parseUA(ua) {
-  const uaStr = (ua || '').toLowerCase();
-  let device = 'Outro';
-  let os = '';
-  if (/ipad/.test(uaStr)) { device = 'iPad'; os = 'iOS'; }
-  else if (/iphone|ipod/.test(uaStr)) { device = 'iPhone'; os = 'iOS'; }
-  else if (/android/.test(uaStr)) {
-    device = /mobile/.test(uaStr) ? 'Android' : 'Tablet Android';
-    os = 'Android';
+  try {
+    const p = new UAParser(ua);
+    const r = p.getResult();
+    const osName = r.os.name || '';
+    const osVersion = r.os.version || '';
+    const browserName = r.browser.name || '';
+    const browserVersion = r.browser.version || '';
+
+    let device = r.device.type === 'tablet' ? 'Tablet' : (r.device.type === 'mobile' ? 'Celular' : (r.device.type || 'Computador'));
+    let model = (r.device.model || '').trim();
+
+    if (model.startsWith('SM-')) {
+      model = 'Samsung ' + model;
+    }
+    if (osName === 'iOS' && !model) {
+      model = r.device.vendor || 'iPhone';
+    }
+
+    let browserNameFinal = browserName;
+    if (browserName === 'Mobile Safari') browserNameFinal = 'Safari';
+    if (browserName === 'Mobile Chrome') browserNameFinal = 'Chrome';
+
+    return {
+      device,
+      model,
+      os: osName,
+      osVersion,
+      browser: browserNameFinal,
+      browserVersion
+    };
+  } catch {
+    return { device: 'Outro', model: '', os: '', osVersion: '', browser: '', browserVersion: '' };
   }
-  else if (/windows/.test(uaStr)) { device = 'Windows'; os = 'Windows'; }
-  else if (/macintosh|mac os/.test(uaStr)) { device = 'Mac'; os = 'macOS'; }
-  else if (/linux/.test(uaStr)) { device = 'Linux'; os = 'Linux'; }
-
-  let browser = 'Navegador';
-  if (/edg\//.test(uaStr)) browser = 'Edge';
-  else if (/opr\//.test(uaStr) || /opera/.test(uaStr)) browser = 'Opera';
-  else if (/whatsapp/.test(uaStr)) browser = 'WhatsApp';
-  else if (/instagram/.test(uaStr)) browser = 'Instagram';
-  else if (/samsungbrowser/.test(uaStr)) browser = 'Samsung Internet';
-  else if (/firefox\//.test(uaStr) || /fxios/.test(uaStr)) browser = 'Firefox';
-  else if (/chrome\//.test(uaStr) || /crios\//.test(uaStr)) browser = 'Chrome';
-  else if (/safari\//.test(uaStr)) browser = 'Safari';
-
-  return { device, os, browser };
 }
 
 async function lookupCountry(ip) {
@@ -203,8 +213,11 @@ app.get('/:code', async (req, res) => {
     t: new Date().toISOString(),
     ip: req.ip || '',
     device: info.device,
+    model: info.model || '',
     os: info.os,
+    osVersion: info.osVersion || '',
     browser: info.browser,
+    browserVersion: info.browserVersion || '',
     ref: (req.get('referer') || '').slice(0, 200)
   };
   const clickLog = (link.clickLog || []).slice(-199);

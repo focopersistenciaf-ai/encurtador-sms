@@ -10,6 +10,7 @@
     "cookie-parser": "^1.4.7",
     "express": "^4.19.2",
     "mongodb": "^7.9.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "ua-parser-js": "^2.0.10"
   }
 }
