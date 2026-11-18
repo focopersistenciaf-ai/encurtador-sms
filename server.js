@@ -52,7 +52,8 @@ async function getLinks() {
         createdAt: doc.createdAt,
         clickLog: doc.clickLog || [],
         ipCountries: doc.ipCountries || {},
-        expiresAt: doc.expiresAt || null
+        expiresAt: doc.expiresAt || null,
+        capture: doc.capture || false
       };
     }
     return links;
@@ -238,6 +239,10 @@ app.get('/:code', async (req, res) => {
     return res.status(410).sendFile(path.join(__dirname, 'public', '410.html'));
   }
 
+  if (link.capture && !req.cookies['captured_' + code]) {
+    return res.sendFile(path.join(__dirname, 'public', 'captura.html'));
+  }
+
   const info = parseUA(req.get('user-agent'));
   const clickEntry = {
     t: new Date().toISOString(),
@@ -261,7 +266,8 @@ app.get('/:code', async (req, res) => {
     clicks: (link.clicks || 0) + 1,
     clickLog,
     ipCountries: link.ipCountries || {},
-    expiresAt: link.expiresAt || null
+    expiresAt: link.expiresAt || null,
+    capture: link.capture || false
   });
 
   let target = link.url;
@@ -274,6 +280,53 @@ app.get('/:code', async (req, res) => {
   }
 
   res.redirect(301, target);
+});
+
+app.post('/api/capture/:code', async (req, res) => {
+  const code = req.params.code;
+  const phone = (req.body.phone || '').replace(/\D/g, '');
+
+  if (!/^\d{10,11}$/.test(phone)) {
+    return res.status(400).json({ error: 'Número inválido. Digite com DDD.' });
+  }
+
+  const links = await getLinks();
+  const link = links[code];
+
+  if (!link) {
+    return res.status(404).json({ error: 'Link não encontrado' });
+  }
+
+  const info = parseUA(req.get('user-agent'));
+  const clickEntry = {
+    t: new Date().toISOString(),
+    ip: req.ip || '',
+    ua: (req.get('user-agent') || '').slice(0, 300),
+    device: info.device,
+    model: info.model || '',
+    os: info.os,
+    osVersion: info.osVersion || '',
+    browser: info.browser,
+    browserVersion: info.browserVersion || '',
+    source: info.source || '',
+    ref: (req.get('referer') || '').slice(0, 200),
+    phone
+  };
+  const clickLog = (link.clickLog || []).slice(-199);
+  clickLog.push(clickEntry);
+
+  await setLink(code, {
+    url: link.url,
+    createdAt: link.createdAt,
+    clicks: (link.clicks || 0) + 1,
+    clickLog,
+    ipCountries: link.ipCountries || {},
+    expiresAt: link.expiresAt || null,
+    capture: link.capture || false
+  });
+
+  res.setHeader('Set-Cookie', `captured_${code}=1; Path=/; Max-Age=86400`);
+  res.json({ ok: true, redirect: link.url });
 });
 
 app.get('/qr/:code', async (req, res) => {
@@ -330,6 +383,9 @@ app.post('/api/shorten', async (req, res) => {
   const data = { url, clicks: 0, createdAt: new Date().toISOString() };
   if (expiresDays) {
     data.expiresAt = new Date(Date.now() + expiresDays * 24 * 3600 * 1000).toISOString();
+  }
+  if (req.body.capture) {
+    data.capture = true;
   }
   await setLink(code, data);
 
@@ -404,7 +460,8 @@ app.delete('/api/admin/links/:code/clicks', requireAuth, async (req, res) => {
     clicks: 0,
     clickLog: [],
     ipCountries: {},
-    expiresAt: link.expiresAt || null
+    expiresAt: link.expiresAt || null,
+    capture: link.capture || false
   });
   res.json({ ok: true });
 });
